@@ -5,13 +5,17 @@ declare(strict_types=1);
 namespace MongoDB\Laravel\Schema;
 
 use Closure;
+use MongoDB\Collection;
+use MongoDB\Driver\Exception\ServerException;
 use MongoDB\Model\CollectionInfo;
 use MongoDB\Model\IndexInfo;
 
+use function array_column;
 use function array_fill_keys;
 use function array_filter;
 use function array_keys;
 use function array_map;
+use function array_merge;
 use function assert;
 use function count;
 use function current;
@@ -225,9 +229,11 @@ class Builder extends \Illuminate\Database\Schema\Builder
 
     public function getIndexes($table)
     {
-        $indexes = $this->connection->getMongoDB()->selectCollection($table)->listIndexes();
-
+        $collection = $this->connection->getMongoDB()->selectCollection($table);
+        assert($collection instanceof Collection);
         $indexList = [];
+
+        $indexes = $collection->listIndexes();
         foreach ($indexes as $index) {
             assert($index instanceof IndexInfo);
             $indexList[] = [
@@ -238,10 +244,33 @@ class Builder extends \Illuminate\Database\Schema\Builder
                     $index->isText() => 'text',
                     $index->is2dSphere() => '2dsphere',
                     $index->isTtl() => 'ttl',
-                    default => 'default',
+                    default => null,
                 },
                 'unique' => $index->isUnique(),
             ];
+        }
+
+        try {
+            $indexes = $collection->listSearchIndexes(['typeMap' => ['root' => 'array', 'array' => 'array', 'document' => 'array']]);
+            foreach ($indexes as $index) {
+                $indexList[] = [
+                    'name' => $index['name'],
+                    'columns' => match ($index['type']) {
+                        'search' => array_merge(
+                            $index['latestDefinition']['mappings']['dynamic'] ? ['dynamic'] : [],
+                            array_keys($index['latestDefinition']['mappings']['fields'] ?? []),
+                        ),
+                        'vectorSearch' => array_column($index['latestDefinition']['fields'], 'path'),
+                    },
+                    'type' => $index['type'],
+                    'primary' => false,
+                    'unique' => false,
+                ];
+            }
+        } catch (ServerException $exception) {
+            if (! self::isAtlasSearchNotSupportedException($exception)) {
+                throw $exception;
+            }
         }
 
         return $indexList;
@@ -289,5 +318,17 @@ class Builder extends \Illuminate\Database\Schema\Builder
         }
 
         return $collections;
+    }
+
+    /** @internal */
+    public static function isAtlasSearchNotSupportedException(ServerException $e): bool
+    {
+        return in_array($e->getCode(), [
+            59,      // MongoDB 4 to 6, 7-community: no such command: 'createSearchIndexes'
+            40324,   // MongoDB 4 to 6: Unrecognized pipeline stage name: '$listSearchIndexes'
+            115,     // MongoDB 7-ent: Search index commands are only supported with Atlas.
+            6047401, // MongoDB 7: $listSearchIndexes stage is only allowed on MongoDB Atlas
+            31082,   // MongoDB 8: Using Atlas Search Database Commands and the $listSearchIndexes aggregation stage requires additional configuration.
+        ], true);
     }
 }
