@@ -304,6 +304,42 @@ class Blueprint extends SchemaBlueprint
     }
 
     /**
+     * Create an Atlas Search Index.
+     *
+     * @see https://www.mongodb.com/docs/manual/reference/command/createSearchIndexes/#std-label-search-index-definition-create
+     *
+     * @phpstan-param array{
+     *      analyzer?: string,
+     *      analyzers?: list<array>,
+     *      searchAnalyzer?: string,
+     *      mappings: array{dynamic: true} | array{dynamic?: bool, fields: array<string, array>},
+     *      storedSource?: bool|array,
+     *      synonyms?: list<array>,
+     *      ...
+     *  } $definition
+     */
+    public function searchIndex(array $definition, string $name = 'default'): static
+    {
+        $this->collection->createSearchIndex($definition, ['name' => $name, 'type' => 'search']);
+
+        return $this;
+    }
+
+    /**
+     * Create an Atlas Vector Search Index.
+     *
+     * @see https://www.mongodb.com/docs/manual/reference/command/createSearchIndexes/#std-label-vector-search-index-definition-create
+     *
+     * @phpstan-param array{fields: array<string, array{type: string, ...}>} $definition
+     */
+    public function vectorSearchIndex(array $definition, string $name = 'default'): static
+    {
+        $this->collection->createSearchIndex($definition, ['name' => $name, 'type' => 'vectorSearch']);
+
+        return $this;
+    }
+
+    /**
      * Allow fluent columns.
      *
      * @param string|array $columns

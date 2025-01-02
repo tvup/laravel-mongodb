@@ -8,8 +8,11 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use MongoDB\BSON\Binary;
 use MongoDB\BSON\UTCDateTime;
+use MongoDB\Collection;
+use MongoDB\Database;
 use MongoDB\Laravel\Schema\Blueprint;
 
+use function assert;
 use function collect;
 use function count;
 
@@ -17,8 +20,10 @@ class SchemaTest extends TestCase
 {
     public function tearDown(): void
     {
-        Schema::drop('newcollection');
-        Schema::drop('newcollection_two');
+        $database = $this->getConnection('mongodb')->getMongoDB();
+        assert($database instanceof Database);
+        $database->dropCollection('newcollection');
+        $database->dropCollection('newcollection_two');
     }
 
     public function testCreate(): void
@@ -474,6 +479,7 @@ class SchemaTest extends TestCase
         $this->assertSame([], $columns);
     }
 
+    /** @see AtlasSearchTest::testGetIndexes() */
     public function testGetIndexes()
     {
         Schema::create('newcollection', function (Blueprint $collection) {
@@ -523,9 +529,54 @@ class SchemaTest extends TestCase
         $this->assertSame([], $indexes);
     }
 
+    public function testSearchIndex(): void
+    {
+        $this->skipIfSearchIndexManagementIsNotSupported();
+
+        Schema::create('newcollection', function (Blueprint $collection) {
+            $collection->searchIndex([
+                'mappings' => [
+                    'dynamic' => false,
+                    'fields' => [
+                        'foo' => ['type' => 'string', 'analyzer' => 'lucene.whitespace'],
+                    ],
+                ],
+            ]);
+        });
+
+        $index = $this->getSearchIndex('newcollection', 'default');
+        self::assertNotNull($index);
+
+        self::assertSame('default', $index['name']);
+        self::assertSame('search', $index['type']);
+        self::assertFalse($index['latestDefinition']['mappings']['dynamic']);
+        self::assertSame('lucene.whitespace', $index['latestDefinition']['mappings']['fields']['foo']['analyzer']);
+    }
+
+    public function testVectorSearchIndex()
+    {
+        $this->skipIfSearchIndexManagementIsNotSupported();
+
+        Schema::create('newcollection', function (Blueprint $collection) {
+            $collection->vectorSearchIndex([
+                'fields' => [
+                    ['type' => 'vector', 'path' => 'foo', 'numDimensions' => 128, 'similarity' => 'euclidean', 'quantization' => 'none'],
+                ],
+            ], 'vector');
+        });
+
+        $index = $this->getSearchIndex('newcollection', 'vector');
+        self::assertNotNull($index);
+
+        self::assertSame('vector', $index['name']);
+        self::assertSame('vectorSearch', $index['type']);
+        self::assertSame('vector', $index['latestDefinition']['fields'][0]['type']);
+    }
+
     protected function getIndex(string $collection, string $name)
     {
         $collection = DB::getCollection($collection);
+        assert($collection instanceof Collection);
 
         foreach ($collection->listIndexes() as $index) {
             if (isset($index['key'][$name])) {
@@ -534,5 +585,17 @@ class SchemaTest extends TestCase
         }
 
         return false;
+    }
+
+    protected function getSearchIndex(string $collection, string $name): ?array
+    {
+        $collection = DB::getCollection($collection);
+        assert($collection instanceof Collection);
+
+        foreach ($collection->listSearchIndexes(['name' => $name, 'typeMap' => ['root' => 'array', 'array' => 'array', 'document' => 'array']]) as $index) {
+            return $index;
+        }
+
+        return null;
     }
 }
