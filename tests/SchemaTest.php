@@ -11,10 +11,12 @@ use MongoDB\BSON\UTCDateTime;
 use MongoDB\Collection;
 use MongoDB\Database;
 use MongoDB\Laravel\Schema\Blueprint;
+use MongoDB\Model\IndexInfo;
 
 use function assert;
 use function collect;
 use function count;
+use function sprintf;
 
 class SchemaTest extends TestCase
 {
@@ -81,21 +83,21 @@ class SchemaTest extends TestCase
             $collection->index('mykey1');
         });
 
-        $index = $this->getIndex('newcollection', 'mykey1');
+        $index = $this->assertIndexExists('newcollection', 'mykey1_1');
         $this->assertEquals(1, $index['key']['mykey1']);
 
         Schema::table('newcollection', function ($collection) {
             $collection->index(['mykey2']);
         });
 
-        $index = $this->getIndex('newcollection', 'mykey2');
+        $index = $this->assertIndexExists('newcollection', 'mykey2_1');
         $this->assertEquals(1, $index['key']['mykey2']);
 
         Schema::table('newcollection', function ($collection) {
             $collection->string('mykey3')->index();
         });
 
-        $index = $this->getIndex('newcollection', 'mykey3');
+        $index = $this->assertIndexExists('newcollection', 'mykey3_1');
         $this->assertEquals(1, $index['key']['mykey3']);
     }
 
@@ -105,7 +107,7 @@ class SchemaTest extends TestCase
             $collection->string('mykey', 100)->primary();
         });
 
-        $index = $this->getIndex('newcollection', 'mykey');
+        $index = $this->assertIndexExists('newcollection', 'mykey_1');
         $this->assertEquals(1, $index['unique']);
     }
 
@@ -115,7 +117,7 @@ class SchemaTest extends TestCase
             $collection->unique('uniquekey');
         });
 
-        $index = $this->getIndex('newcollection', 'uniquekey');
+        $index = $this->assertIndexExists('newcollection', 'uniquekey_1');
         $this->assertEquals(1, $index['unique']);
     }
 
@@ -126,58 +128,52 @@ class SchemaTest extends TestCase
             $collection->dropIndex('uniquekey_1');
         });
 
-        $index = $this->getIndex('newcollection', 'uniquekey');
-        $this->assertEquals(null, $index);
+        $this->assertIndexNotExists('newcollection', 'uniquekey_1');
 
         Schema::table('newcollection', function ($collection) {
             $collection->unique('uniquekey');
             $collection->dropIndex(['uniquekey']);
         });
 
-        $index = $this->getIndex('newcollection', 'uniquekey');
-        $this->assertEquals(null, $index);
+        $this->assertIndexNotExists('newcollection', 'uniquekey_1');
 
         Schema::table('newcollection', function ($collection) {
             $collection->index(['field_a', 'field_b']);
         });
 
-        $index = $this->getIndex('newcollection', 'field_a_1_field_b_1');
-        $this->assertNotNull($index);
+        $this->assertIndexExists('newcollection', 'field_a_1_field_b_1');
 
         Schema::table('newcollection', function ($collection) {
             $collection->dropIndex(['field_a', 'field_b']);
         });
 
-        $index = $this->getIndex('newcollection', 'field_a_1_field_b_1');
-        $this->assertFalse($index);
+        $this->assertIndexNotExists('newcollection', 'field_a_1_field_b_1');
 
+        $indexName = 'field_a_-1_field_b_1';
         Schema::table('newcollection', function ($collection) {
             $collection->index(['field_a' => -1, 'field_b' => 1]);
         });
 
-        $index = $this->getIndex('newcollection', 'field_a_-1_field_b_1');
-        $this->assertNotNull($index);
+        $this->assertIndexExists('newcollection', $indexName);
 
         Schema::table('newcollection', function ($collection) {
             $collection->dropIndex(['field_a' => -1, 'field_b' => 1]);
         });
 
-        $index = $this->getIndex('newcollection', 'field_a_-1_field_b_1');
-        $this->assertFalse($index);
+        $this->assertIndexNotExists('newcollection', $indexName);
 
-        Schema::table('newcollection', function ($collection) {
-            $collection->index(['field_a', 'field_b'], 'custom_index_name');
+        $indexName = 'custom_index_name';
+        Schema::table('newcollection', function ($collection) use ($indexName) {
+            $collection->index(['field_a', 'field_b'], $indexName);
         });
 
-        $index = $this->getIndex('newcollection', 'custom_index_name');
-        $this->assertNotNull($index);
+        $this->assertIndexExists('newcollection', $indexName);
 
-        Schema::table('newcollection', function ($collection) {
-            $collection->dropIndex('custom_index_name');
+        Schema::table('newcollection', function ($collection) use ($indexName) {
+            $collection->dropIndex($indexName);
         });
 
-        $index = $this->getIndex('newcollection', 'custom_index_name');
-        $this->assertFalse($index);
+        $this->assertIndexNotExists('newcollection', $indexName);
     }
 
     public function testDropIndexIfExists(): void
@@ -187,66 +183,58 @@ class SchemaTest extends TestCase
             $collection->dropIndexIfExists('uniquekey_1');
         });
 
-        $index = $this->getIndex('newcollection', 'uniquekey');
-        $this->assertEquals(null, $index);
+        $this->assertIndexNotExists('newcollection', 'uniquekey');
 
         Schema::table('newcollection', function (Blueprint $collection) {
             $collection->unique('uniquekey');
             $collection->dropIndexIfExists(['uniquekey']);
         });
 
-        $index = $this->getIndex('newcollection', 'uniquekey');
-        $this->assertEquals(null, $index);
+        $this->assertIndexNotExists('newcollection', 'uniquekey');
 
         Schema::table('newcollection', function (Blueprint $collection) {
             $collection->index(['field_a', 'field_b']);
         });
 
-        $index = $this->getIndex('newcollection', 'field_a_1_field_b_1');
-        $this->assertNotNull($index);
+        $this->assertIndexExists('newcollection', 'field_a_1_field_b_1');
 
         Schema::table('newcollection', function (Blueprint $collection) {
             $collection->dropIndexIfExists(['field_a', 'field_b']);
         });
 
-        $index = $this->getIndex('newcollection', 'field_a_1_field_b_1');
-        $this->assertFalse($index);
+        $this->assertIndexNotExists('newcollection', 'field_a_1_field_b_1');
 
         Schema::table('newcollection', function (Blueprint $collection) {
             $collection->index(['field_a', 'field_b'], 'custom_index_name');
         });
 
-        $index = $this->getIndex('newcollection', 'custom_index_name');
-        $this->assertNotNull($index);
+        $this->assertIndexExists('newcollection', 'custom_index_name');
 
         Schema::table('newcollection', function (Blueprint $collection) {
             $collection->dropIndexIfExists('custom_index_name');
         });
 
-        $index = $this->getIndex('newcollection', 'custom_index_name');
-        $this->assertFalse($index);
+        $this->assertIndexNotExists('newcollection', 'custom_index_name');
     }
 
     public function testHasIndex(): void
     {
-        $instance = $this;
-
-        Schema::table('newcollection', function (Blueprint $collection) use ($instance) {
+        Schema::table('newcollection', function (Blueprint $collection) {
             $collection->index('myhaskey1');
-            $instance->assertTrue($collection->hasIndex('myhaskey1_1'));
-            $instance->assertFalse($collection->hasIndex('myhaskey1'));
+            $this->assertTrue($collection->hasIndex('myhaskey1_1'));
+            $this->assertFalse($collection->hasIndex('myhaskey1'));
         });
 
-        Schema::table('newcollection', function (Blueprint $collection) use ($instance) {
+        Schema::table('newcollection', function (Blueprint $collection) {
             $collection->index('myhaskey2');
-            $instance->assertTrue($collection->hasIndex(['myhaskey2']));
-            $instance->assertFalse($collection->hasIndex(['myhaskey2_1']));
+            $this->assertTrue($collection->hasIndex(['myhaskey2']));
+            $this->assertFalse($collection->hasIndex(['myhaskey2_1']));
         });
 
-        Schema::table('newcollection', function (Blueprint $collection) use ($instance) {
+        Schema::table('newcollection', function (Blueprint $collection) {
             $collection->index(['field_a', 'field_b']);
-            $instance->assertTrue($collection->hasIndex(['field_a_1_field_b']));
-            $instance->assertFalse($collection->hasIndex(['field_a_1_field_b_1']));
+            $this->assertTrue($collection->hasIndex(['field_a_1_field_b']));
+            $this->assertFalse($collection->hasIndex(['field_a_1_field_b_1']));
         });
     }
 
@@ -256,7 +244,7 @@ class SchemaTest extends TestCase
             $collection->sparse('sparsekey');
         });
 
-        $index = $this->getIndex('newcollection', 'sparsekey');
+        $index = $this->assertIndexExists('newcollection', 'sparsekey_1');
         $this->assertEquals(1, $index['sparse']);
     }
 
@@ -266,7 +254,7 @@ class SchemaTest extends TestCase
             $collection->expire('expirekey', 60);
         });
 
-        $index = $this->getIndex('newcollection', 'expirekey');
+        $index = $this->assertIndexExists('newcollection', 'expirekey_1');
         $this->assertEquals(60, $index['expireAfterSeconds']);
     }
 
@@ -280,7 +268,7 @@ class SchemaTest extends TestCase
             $collection->string('email')->nullable()->index();
         });
 
-        $index = $this->getIndex('newcollection', 'email');
+        $index = $this->assertIndexExists('newcollection', 'email_1');
         $this->assertEquals(1, $index['key']['email']);
     }
 
@@ -292,10 +280,10 @@ class SchemaTest extends TestCase
             $collection->timestamp('created_at');
         });
 
-        $index = $this->getIndex('newcollection', 'email');
+        $index = $this->assertIndexExists('newcollection', 'email_1');
         $this->assertEquals(1, $index['key']['email']);
 
-        $index = $this->getIndex('newcollection', 'token');
+        $index = $this->assertIndexExists('newcollection', 'token_1');
         $this->assertEquals(1, $index['key']['token']);
     }
 
@@ -307,13 +295,13 @@ class SchemaTest extends TestCase
             $collection->geospatial('continent', '2dsphere');
         });
 
-        $index = $this->getIndex('newcollection', 'point');
+        $index = $this->assertIndexExists('newcollection', 'point_2d');
         $this->assertEquals('2d', $index['key']['point']);
 
-        $index = $this->getIndex('newcollection', 'area');
+        $index = $this->assertIndexExists('newcollection', 'area_2d');
         $this->assertEquals('2d', $index['key']['area']);
 
-        $index = $this->getIndex('newcollection', 'continent');
+        $index = $this->assertIndexExists('newcollection', 'continent_2dsphere');
         $this->assertEquals('2dsphere', $index['key']['continent']);
     }
 
@@ -332,7 +320,7 @@ class SchemaTest extends TestCase
             $collection->sparse_and_unique('sparseuniquekey');
         });
 
-        $index = $this->getIndex('newcollection', 'sparseuniquekey');
+        $index = $this->assertIndexExists('newcollection', 'sparseuniquekey_1');
         $this->assertEquals(1, $index['sparse']);
         $this->assertEquals(1, $index['unique']);
     }
@@ -573,23 +561,39 @@ class SchemaTest extends TestCase
         self::assertSame('vector', $index['latestDefinition']['fields'][0]['type']);
     }
 
-    protected function getIndex(string $collection, string $name)
+    protected function assertIndexExists(string $collection, string $name): IndexInfo
     {
-        $collection = DB::getCollection($collection);
+        $index = $this->getIndex($collection, $name);
+
+        self::assertNotNull($index, sprintf('Index "%s.%s" does not exist.', $collection, $name));
+
+        return $index;
+    }
+
+    protected function assertIndexNotExists(string $collection, string $name): void
+    {
+        $index = $this->getIndex($collection, $name);
+
+        self::assertNull($index, sprintf('Index "%s.%s" exists.', $collection, $name));
+    }
+
+    protected function getIndex(string $collection, string $name): ?IndexInfo
+    {
+        $collection = $this->getConnection('mongodb')->getCollection($collection);
         assert($collection instanceof Collection);
 
         foreach ($collection->listIndexes() as $index) {
-            if (isset($index['key'][$name])) {
+            if ($index->getName() === $name) {
                 return $index;
             }
         }
 
-        return false;
+        return null;
     }
 
     protected function getSearchIndex(string $collection, string $name): ?array
     {
-        $collection = DB::getCollection($collection);
+        $collection = $this->getConnection('mongodb')->getCollection($collection);
         assert($collection instanceof Collection);
 
         foreach ($collection->listSearchIndexes(['name' => $name, 'typeMap' => ['root' => 'array', 'array' => 'array', 'document' => 'array']]) as $index) {
