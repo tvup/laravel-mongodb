@@ -539,6 +539,13 @@ class SchemaTest extends TestCase
         self::assertSame('search', $index['type']);
         self::assertFalse($index['latestDefinition']['mappings']['dynamic']);
         self::assertSame('lucene.whitespace', $index['latestDefinition']['mappings']['fields']['foo']['analyzer']);
+
+        Schema::table('newcollection', function (Blueprint $collection) {
+            $collection->dropSearchIndex('default');
+        });
+
+        $index = $this->getSearchIndex('newcollection', 'default');
+        self::assertNull($index);
     }
 
     public function testVectorSearchIndex()
@@ -559,6 +566,14 @@ class SchemaTest extends TestCase
         self::assertSame('vector', $index['name']);
         self::assertSame('vectorSearch', $index['type']);
         self::assertSame('vector', $index['latestDefinition']['fields'][0]['type']);
+
+        // Drop the index
+        Schema::table('newcollection', function (Blueprint $collection) {
+            $collection->dropSearchIndex('vector');
+        });
+
+        $index = $this->getSearchIndex('newcollection', 'vector');
+        self::assertNull($index);
     }
 
     protected function assertIndexExists(string $collection, string $name): IndexInfo
