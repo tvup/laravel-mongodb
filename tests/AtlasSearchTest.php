@@ -2,7 +2,10 @@
 
 namespace MongoDB\Laravel\Tests;
 
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Support\Collection as LaravelCollection;
 use Illuminate\Support\Facades\Schema;
+use MongoDB\Builder\Search;
 use MongoDB\Collection as MongoDBCollection;
 use MongoDB\Driver\Exception\ServerException;
 use MongoDB\Laravel\Schema\Builder;
@@ -43,6 +46,7 @@ class AtlasSearchTest extends TestCase
 
         $collection = $this->getConnection('mongodb')->getCollection('books');
         assert($collection instanceof MongoDBCollection);
+
         try {
             $collection->createSearchIndex([
                 'mappings' => [
@@ -50,6 +54,7 @@ class AtlasSearchTest extends TestCase
                         'title' => [
                             ['type' => 'string', 'analyzer' => 'lucene.english'],
                             ['type' => 'autocomplete', 'analyzer' => 'lucene.english'],
+                            ['type' => 'token'],
                         ],
                     ],
                 ],
@@ -134,5 +139,64 @@ class AtlasSearchTest extends TestCase
         ];
 
         self::assertSame($expected, $indexes);
+    }
+
+    public function testEloquentBuilderSearch()
+    {
+        $results = Book::search(
+            sort: ['title' => 1],
+            operator: Search::text('title', 'systems'),
+        );
+
+        self::assertInstanceOf(EloquentCollection::class, $results);
+        self::assertCount(3, $results);
+        self::assertInstanceOf(Book::class, $results->first());
+        self::assertSame([
+            'Database System Concepts',
+            'Modern Operating Systems',
+            'Operating System Concepts',
+        ], $results->pluck('title')->all());
+    }
+
+    public function testDatabaseBuilderSearch()
+    {
+        $results = $this->getConnection('mongodb')->table('books')
+            ->search(Search::text('title', 'systems'), sort: ['title' => 1]);
+
+        self::assertInstanceOf(LaravelCollection::class, $results);
+        self::assertCount(3, $results);
+        self::assertIsArray($results->first());
+        self::assertSame([
+            'Database System Concepts',
+            'Modern Operating Systems',
+            'Operating System Concepts',
+        ], $results->pluck('title')->all());
+    }
+
+    public function testEloquentBuilderAutocomplete()
+    {
+        $results = Book::autocomplete('title', 'system');
+
+        self::assertInstanceOf(LaravelCollection::class, $results);
+        self::assertCount(3, $results);
+        self::assertSame([
+            'Operating System Concepts',
+            'Database System Concepts',
+            'Modern Operating Systems',
+        ], $results->all());
+    }
+
+    public function testDatabaseBuilderAutocomplete()
+    {
+        $results = $this->getConnection('mongodb')->table('books')
+            ->autocomplete('title', 'system');
+
+        self::assertInstanceOf(LaravelCollection::class, $results);
+        self::assertCount(3, $results);
+        self::assertSame([
+            'Operating System Concepts',
+            'Database System Concepts',
+            'Modern Operating Systems',
+        ], $results->all());
     }
 }

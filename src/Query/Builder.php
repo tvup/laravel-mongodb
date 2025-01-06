@@ -23,13 +23,16 @@ use MongoDB\BSON\Binary;
 use MongoDB\BSON\ObjectID;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
+use MongoDB\Builder\Search;
 use MongoDB\Builder\Stage\FluentFactoryTrait;
+use MongoDB\Builder\Type\SearchOperatorInterface;
 use MongoDB\Driver\Cursor;
 use Override;
 use RuntimeException;
 use stdClass;
 
 use function array_fill_keys;
+use function array_filter;
 use function array_is_list;
 use function array_key_exists;
 use function array_map;
@@ -1488,6 +1491,68 @@ class Builder extends BaseBuilder
         $this->options = $options;
 
         return $this;
+    }
+
+    /**
+     * Performs a full-text search of the field or fields in an Atlas collection.
+     * NOTE: $search is only available for MongoDB Atlas clusters, and is not available for self-managed deployments.
+     *
+     * @see https://www.mongodb.com/docs/atlas/atlas-search/aggregation-stages/search/
+     *
+     * @return Collection<object|array>
+     */
+    public function search(
+        SearchOperatorInterface|array $operator,
+        ?string $index = null,
+        ?array $highlight = null,
+        ?bool $concurrent = null,
+        ?string $count = null,
+        ?string $searchAfter = null,
+        ?string $searchBefore = null,
+        ?bool $scoreDetails = null,
+        ?array $sort = null,
+        ?bool $returnStoredSource = null,
+        ?array $tracking = null,
+    ): Collection {
+        // Forward named arguments to the search stage, skip null values
+        $args = array_filter([
+            'operator' => $operator,
+            'index' => $index,
+            'highlight' => $highlight,
+            'concurrent' => $concurrent,
+            'count' => $count,
+            'searchAfter' => $searchAfter,
+            'searchBefore' => $searchBefore,
+            'scoreDetails' => $scoreDetails,
+            'sort' => $sort,
+            'returnStoredSource' => $returnStoredSource,
+            'tracking' => $tracking,
+        ], fn ($arg) => $arg !== null);
+
+        return $this->aggregate()->search(...$args)->get();
+    }
+
+    /**
+     * Performs an autocomplete search of the field using an Atlas Search index.
+     * NOTE: $search is only available for MongoDB Atlas clusters, and is not available for self-managed deployments.
+     * You must create an Atlas Search index with an autocomplete configuration before you can use this stage.
+     *
+     * @see https://www.mongodb.com/docs/atlas/atlas-search/autocomplete/
+     *
+     * @return Collection<string>
+     */
+    public function autocomplete(string $path, string $query, bool|array $fuzzy = false, string $tokenOrder = 'any'): Collection
+    {
+        $args = ['path' => $path, 'query' => $query, 'tokenOrder' => $tokenOrder];
+        if ($fuzzy === true) {
+            $args['fuzzy'] = ['maxEdits' => 2];
+        } elseif ($fuzzy !== false) {
+            $args['fuzzy'] = $fuzzy;
+        }
+
+        return $this->aggregate()->search(
+            Search::autocomplete(...$args),
+        )->get()->pluck($path);
     }
 
     /**
