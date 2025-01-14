@@ -28,6 +28,7 @@ use MongoDB\Builder\Stage\FluentFactoryTrait;
 use MongoDB\Builder\Type\QueryInterface;
 use MongoDB\Builder\Type\SearchOperatorInterface;
 use MongoDB\Driver\Cursor;
+use MongoDB\Driver\ReadPreference;
 use Override;
 use RuntimeException;
 use stdClass;
@@ -102,7 +103,7 @@ class Builder extends BaseBuilder
     /**
      * The maximum amount of seconds to allow the query to run.
      *
-     * @var int
+     * @var int|float
      */
     public $timeout;
 
@@ -112,6 +113,8 @@ class Builder extends BaseBuilder
      * @var int
      */
     public $hint;
+
+    private ReadPreference $readPreference;
 
     /**
      * Custom options to add to the query.
@@ -211,7 +214,7 @@ class Builder extends BaseBuilder
     /**
      * The maximum amount of seconds to allow the query to run.
      *
-     * @param  int $seconds
+     * @param  int|float $seconds
      *
      * @return $this
      */
@@ -454,7 +457,7 @@ class Builder extends BaseBuilder
 
         // Apply order, offset, limit and projection
         if ($this->timeout) {
-            $options['maxTimeMS'] = $this->timeout * 1000;
+            $options['maxTimeMS'] = (int) ($this->timeout * 1000);
         }
 
         if ($this->orders) {
@@ -1535,6 +1538,24 @@ class Builder extends BaseBuilder
     }
 
     /**
+     * Set the read preference for the query
+     *
+     * @see https://www.php.net/manual/en/class.mongodb-driver-readpreference.php
+     *
+     * @param  string $mode
+     * @param  array  $tagSets
+     * @param  array  $options
+     *
+     * @return $this
+     */
+    public function readPreference(string $mode, ?array $tagSets = null, ?array $options = null): static
+    {
+        $this->readPreference = new ReadPreference($mode, $tagSets, $options);
+
+        return $this;
+    }
+
+    /**
      * Performs a full-text search of the field or fields in an Atlas collection.
      * NOTE: $search is only available for MongoDB Atlas clusters, and is not available for self-managed deployments.
      *
@@ -1640,6 +1661,10 @@ class Builder extends BaseBuilder
             if ($session) {
                 $options['session'] = $session;
             }
+        }
+
+        if (! isset($options['readPreference']) && isset($this->readPreference)) {
+            $options['readPreference'] = $this->readPreference;
         }
 
         return $options;
