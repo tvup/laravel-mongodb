@@ -30,7 +30,7 @@ class UpdateOneTest extends TestCase
 
         // begin-eloquent-update-one
         $updates = Movie::where('title', 'Carol')
-            ->orderBy('_id')
+            ->orderBy('id')
             ->first()
             ->update([
                 'imdb' => [

@@ -36,7 +36,7 @@ class FindManyTest extends TestCase
 
         // begin-eloquent-find
         $movies = Movie::where('runtime', '>', 900)
-            ->orderBy('_id')
+            ->orderBy('id')
             ->get();
         // end-eloquent-find
 
