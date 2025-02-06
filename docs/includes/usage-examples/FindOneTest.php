@@ -54,10 +54,10 @@ class FindOneTest extends TestCase
           ->orderBy('_id')
           ->first();
 
-        echo $movie['title'];
+        echo $movie->title;
         // end-qb-find-one
 
-        $this->assertSame($movie['title'], 'The Shawshank Redemption');
+        $this->assertSame($movie->title, 'The Shawshank Redemption');
         $this->expectOutputString('The Shawshank Redemption');
     }
 }
