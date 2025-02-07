@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use MongoDB\BSON\ObjectId;
 use MongoDB\BSON\Regex;
 use MongoDB\Collection;
+use MongoDB\Driver\ReadPreference;
 use MongoDB\Laravel\Tests\TestCase;
 
 use function file_get_contents;
@@ -448,6 +449,18 @@ class QueryBuilderTest extends TestCase
             ->where('year', 2001)
             ->get();
         // end query cursor timeout
+
+        $this->assertInstanceOf(\Illuminate\Support\Collection::class, $result);
+    }
+
+    public function testReadPreference(): void
+    {
+        // begin query read pref
+        $result = DB::table('movies')
+            ->where('runtime', '>', 240)
+            ->readPreference(ReadPreference::SECONDARY_PREFERRED)
+            ->get();
+        // end query read pref
 
         $this->assertInstanceOf(\Illuminate\Support\Collection::class, $result);
     }
