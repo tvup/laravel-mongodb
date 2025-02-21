@@ -10,6 +10,7 @@ use Illuminate\Pagination\AbstractPaginator;
 use Illuminate\Support\Facades\DB;
 use MongoDB\BSON\ObjectId;
 use MongoDB\BSON\Regex;
+use MongoDB\BSON\UTCDateTime;
 use MongoDB\Collection;
 use MongoDB\Laravel\Tests\TestCase;
 
@@ -664,5 +665,28 @@ class QueryBuilderTest extends TestCase
         // end unset
 
         $this->assertIsInt($result);
+    }
+
+    public function testTimeSeries(): void
+    {
+        // begin time series
+        $data = [
+            [
+                'precipitation_mm' => 0.5,
+                'location' => 'New York City',
+                'timestamp' => new UTCDateTime(Carbon::create(2023, 9, 12, 0, 0, 0, 'CET')),
+            ],
+            [
+                'precipitation_mm' => 2.8,
+                'location' => 'New York City',
+                'timestamp' => new UTCDateTime(Carbon::create(2023, 9, 17, 0, 0, 0, 'CET')),
+            ],
+        ];
+
+        $result = DB::table('precipitation')
+            ->insert($data);
+        // end time series
+
+        $this->assertTrue($result);
     }
 }
