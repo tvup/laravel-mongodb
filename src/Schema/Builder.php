@@ -8,6 +8,7 @@ use Closure;
 use MongoDB\Model\CollectionInfo;
 use MongoDB\Model\IndexInfo;
 
+use MongoDB\Laravel\Connection;
 use function array_fill_keys;
 use function array_filter;
 use function array_keys;
@@ -24,6 +25,7 @@ use function str_ends_with;
 use function substr;
 use function usort;
 
+/** @property Connection $connection */
 class Builder extends \Illuminate\Database\Schema\Builder
 {
     /**
@@ -133,9 +135,9 @@ class Builder extends \Illuminate\Database\Schema\Builder
         }
     }
 
-    public function getTables()
+    public function getTables($schema = null)
     {
-        $db = $this->connection->getMongoDB();
+        $db = $this->connection->getDatabase($schema);
         $collections = [];
 
         foreach ($db->listCollectionNames() as $collectionName) {
@@ -161,9 +163,23 @@ class Builder extends \Illuminate\Database\Schema\Builder
         return $collections;
     }
 
-    public function getTableListing()
+    public function getTableListing($schema = null, $schemaQualified = true)
     {
-        $collections = iterator_to_array($this->connection->getMongoDB()->listCollectionNames());
+        $collections = [];
+
+        if ($schema === null || is_string($schema)) {
+            $collections[$schema ?? ''] = iterator_to_array($this->connection->getDatabase($schema)->listCollectionNames());
+        } elseif (is_array($schema)) {
+            foreach ($schema as $db) {
+                $collections[$db] = iterator_to_array($this->connection->getDatabase($db)->listCollectionNames());
+            }
+        }
+
+        if ($schema && $schemaQualified) {
+            $collections = array_map(fn ($db, $collections) => array_map(static fn ($collection) => $db . '.' . $collection, $collections), array_keys($collections), $collections);
+        }
+
+        $collections = array_merge(...array_values($collections));
 
         sort($collections);
 

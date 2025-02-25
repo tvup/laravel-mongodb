@@ -122,6 +122,23 @@ class Connection extends BaseConnection
     }
 
     /**
+     * Get the MongoDB database object
+     *
+     * @param string|null $name Name of the database, or null to get the default one
+     *
+     * @return Database
+     */
+    public function getDatabase(?string $name = null): Database
+    {
+        if ($name === null) {
+            return $this->db;
+        }
+
+        return $this->connection->{$name};
+    }
+
+
+    /**
      * return MongoDB object.
      *
      * @return Client
@@ -327,13 +344,13 @@ class Connection extends BaseConnection
     /** @inheritdoc */
     protected function getDefaultQueryGrammar()
     {
-        return new Query\Grammar();
+        return new Query\Grammar($this);
     }
 
     /** @inheritdoc */
     protected function getDefaultSchemaGrammar()
     {
-        return new Schema\Grammar();
+        return new Schema\Grammar($this);
     }
 
     /**
